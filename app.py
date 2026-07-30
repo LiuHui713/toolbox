@@ -32,6 +32,7 @@ def text_extract():
     """多模态文字提取 → Word 输出"""
     try:
         texts = []
+        original_names = []
         files = request.files.getlist('files')
         
         for f in files:
@@ -40,6 +41,7 @@ def text_extract():
             ext = f.filename.rsplit('.', 1)[1].lower()
             fname = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(f.filename))
             f.save(fname)
+            original_names.append(f.filename)
 
             try:
                 if ext == 'pdf':
@@ -70,7 +72,7 @@ def text_extract():
                     # Use faster-whisper for audio
                     from faster_whisper import WhisperModel
                     model = WhisperModel("base", device="cpu", compute_type="int8")
-                    segments, _ = model.transcribe(fname)
+                    segments, _ = model.transcribe(fname, language="zh")
                     texts.extend([s.text for s in segments])
                 elif ext in ('mp4', 'avi', 'mov', 'webm'):
                     import subprocess, tempfile
@@ -80,7 +82,7 @@ def text_extract():
                                    capture_output=True, timeout=120)
                     from faster_whisper import WhisperModel
                     model = WhisperModel("base", device="cpu", compute_type="int8")
-                    segments, _ = model.transcribe(audio_path)
+                    segments, _ = model.transcribe(audio_path, language="zh")
                     texts.extend([s.text for s in segments])
                     os.remove(audio_path)
                 elif ext in ('txt', 'md', 'csv'):
@@ -96,6 +98,7 @@ def text_extract():
 
         # Generate Word document
         from docx import Document as DocxDoc
+        from datetime import datetime
         doc = DocxDoc()
         doc.add_heading('文字提取结果', 0)
         for i, t in enumerate(texts):
@@ -105,8 +108,14 @@ def text_extract():
         buf = io.BytesIO()
         doc.save(buf)
         buf.seek(0)
+        
+        # Filename: original name + timestamp
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        base = original_names[0].rsplit('.', 1)[0] if original_names else 'extracted'
+        dl_name = f'{base}_{ts}.docx'
+        
         return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                         as_attachment=True, download_name='extracted.docx')
+                         as_attachment=True, download_name=dl_name)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
