@@ -137,13 +137,19 @@ def text_extract():
         doc.save(buf)
         buf.seek(0)
         
-        # Filename: original name + timestamp
+        # Filename + timestamp
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         base = original_names[0].rsplit('.', 1)[0] if original_names else 'extracted'
         dl_name = f'{base}_{ts}.docx'
         
-        return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                         as_attachment=True, download_name=dl_name)
+        from flask import make_response
+        resp = make_response(buf.read())
+        resp.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        resp.headers['Content-Disposition'] = f'attachment; filename="{dl_name}"'
+        resp.headers['Content-Length'] = str(len(resp.data))
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
