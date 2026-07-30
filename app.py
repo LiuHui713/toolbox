@@ -71,7 +71,7 @@ def text_extract():
                     import subprocess, tempfile
                     # Use faster-whisper for audio
                     from faster_whisper import WhisperModel
-                    model = WhisperModel("base", device="cpu", compute_type="int8")
+                    model = WhisperModel("medium", device="cpu", compute_type="int8")
                     segments, _ = model.transcribe(fname, language="zh")
                     texts.extend([s.text for s in segments])
                 elif ext in ('mp4', 'avi', 'mov', 'webm'):
@@ -81,7 +81,7 @@ def text_extract():
                     subprocess.run(['ffmpeg', '-i', fname, '-vn', '-acodec', 'pcm_s16le', '-y', audio_path],
                                    capture_output=True, timeout=120)
                     from faster_whisper import WhisperModel
-                    model = WhisperModel("base", device="cpu", compute_type="int8")
+                    model = WhisperModel("medium", device="cpu", compute_type="int8")
                     segments, _ = model.transcribe(audio_path, language="zh")
                     texts.extend([s.text for s in segments])
                     os.remove(audio_path)
