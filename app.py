@@ -68,22 +68,50 @@ def text_extract():
                     if result:
                         texts.extend([line[1] for line in result])
                 elif ext in ('mp3', 'wav', 'm4a', 'ogg'):
-                    import subprocess, tempfile
-                    # Use faster-whisper for audio
-                    from faster_whisper import WhisperModel
-                    model = WhisperModel("medium", device="cpu", compute_type="int8")
-                    segments, _ = model.transcribe(fname, language="zh")
-                    texts.extend([s.text for s in segments])
+                    # Groq Whisper API (free tier) - high accuracy, no server load
+                    import requests as req
+                    groq_key = os.environ.get('GROQ_API_KEY', '')
+                    if groq_key:
+                        with open(fname, 'rb') as af:
+                            resp = req.post(
+                                'https://api.groq.com/openai/v1/audio/transcriptions',
+                                headers={'Authorization': f'Bearer {groq_key}'},
+                                files={'file': (f.filename, af)},
+                                data={'model': 'whisper-large-v3', 'language': 'zh'}
+                            )
+                        if resp.status_code == 200:
+                            texts.append(resp.json()['text'])
+                        else:
+                            raise Exception(f"Groq API error: {resp.text}")
+                    else:
+                        # Fallback: local faster-whisper small model
+                        from faster_whisper import WhisperModel
+                        model = WhisperModel("small", device="cpu", compute_type="int8")
+                        segments, _ = model.transcribe(fname, language="zh")
+                        texts.extend([s.text for s in segments])
                 elif ext in ('mp4', 'avi', 'mov', 'webm'):
-                    import subprocess, tempfile
-                    # Extract audio from video then transcribe
+                    import requests as req, subprocess, tempfile
                     audio_path = fname + '.wav'
                     subprocess.run(['ffmpeg', '-i', fname, '-vn', '-acodec', 'pcm_s16le', '-y', audio_path],
                                    capture_output=True, timeout=120)
-                    from faster_whisper import WhisperModel
-                    model = WhisperModel("medium", device="cpu", compute_type="int8")
-                    segments, _ = model.transcribe(audio_path, language="zh")
-                    texts.extend([s.text for s in segments])
+                    groq_key = os.environ.get('GROQ_API_KEY', '')
+                    if groq_key:
+                        with open(audio_path, 'rb') as af:
+                            resp = req.post(
+                                'https://api.groq.com/openai/v1/audio/transcriptions',
+                                headers={'Authorization': f'Bearer {groq_key}'},
+                                files={'file': (os.path.basename(fname)+'.wav', af)},
+                                data={'model': 'whisper-large-v3', 'language': 'zh'}
+                            )
+                        if resp.status_code == 200:
+                            texts.append(resp.json()['text'])
+                        else:
+                            raise Exception(f"Groq API error: {resp.text}")
+                    else:
+                        from faster_whisper import WhisperModel
+                        model = WhisperModel("small", device="cpu", compute_type="int8")
+                        segments, _ = model.transcribe(audio_path, language="zh")
+                        texts.extend([s.text for s in segments])
                     os.remove(audio_path)
                 elif ext in ('txt', 'md', 'csv'):
                     with open(fname, 'r', encoding='utf-8', errors='ignore') as fh:
