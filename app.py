@@ -2,6 +2,15 @@
 Toolbox - 工具箱网站
 """
 
+# Preload Whisper model at startup (lazy, cached in memory)
+_whisper_model = None
+
+def get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        from faster_whisper import WhisperModel
+        _whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
+    return _whisper_model
 import io, os, uuid
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
@@ -84,9 +93,8 @@ def text_extract():
                         else:
                             raise Exception(f"Groq API error: {resp.text}")
                     else:
-                        # Fallback: local faster-whisper small model
-                        from faster_whisper import WhisperModel
-                        model = WhisperModel("small", device="cpu", compute_type="int8")
+                        # Fallback: local faster-whisper
+                        model = get_whisper_model()
                         segments, _ = model.transcribe(fname, language="zh")
                         texts.extend([s.text for s in segments])
                 elif ext in ('mp4', 'avi', 'mov', 'webm'):
@@ -108,8 +116,7 @@ def text_extract():
                         else:
                             raise Exception(f"Groq API error: {resp.text}")
                     else:
-                        from faster_whisper import WhisperModel
-                        model = WhisperModel("small", device="cpu", compute_type="int8")
+                        model = get_whisper_model()
                         segments, _ = model.transcribe(audio_path, language="zh")
                         texts.extend([s.text for s in segments])
                     os.remove(audio_path)
@@ -251,4 +258,7 @@ def poster_generate():
 
 
 if __name__ == '__main__':
+    # Pre-download whisper model on startup
+    import threading
+    threading.Thread(target=get_whisper_model, daemon=True).start()
     app.run(host='0.0.0.0', port=5000, debug=True)
