@@ -1,0 +1,48 @@
+<!DOCTYPE html><html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>PPT生成</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;background:#0f0c29;min-height:100vh;color:#fff}
+.container{max-width:700px;margin:0 auto;padding:2rem 1.5rem}
+.back{color:#667eea;text-decoration:none;font-size:.9rem;margin-bottom:2rem;display:inline-block}
+h1{font-size:1.8rem;margin-bottom:.5rem}
+.sub{color:#aaa;font-size:.9rem;margin-bottom:2rem}
+.form-group{margin-bottom:1.2rem}
+.form-group label{display:block;font-size:.9rem;color:#ccc;margin-bottom:.3rem}
+.form-group input,.form-group textarea{width:100%;padding:.8rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:#fff;font-size:.95rem;font-family:inherit}
+.form-group textarea{height:250px;resize:vertical}
+.btn{display:block;width:100%;padding:1rem;font-size:1.1rem;font-weight:600;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;transition:.2s}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.hint{color:#888;font-size:.8rem;margin-top:.5rem}
+.result{margin-top:1rem;padding:1rem;border-radius:8px;text-align:center}
+.success{background:rgba(46,204,113,.15);color:#2ecc71}
+.error{background:rgba(231,76,60,.15);color:#e74c3c}
+</style></head>
+<body>
+<div class="container">
+<a class="back" href="/">← 返回工具箱</a>
+<h1>📊 PPT 生成工具</h1>
+<p class="sub">输入文字内容，自动生成排版精美的 PowerPoint 演示文稿。每个段落生成一张幻灯片。</p>
+<div class="form-group"><label>演示文稿标题</label><input id="title" value="我的演示文稿" placeholder="输入标题"></div>
+<div class="form-group"><label>内容 (每段生成一页幻灯片，段内首行为标题)</label><textarea id="content" placeholder="第一页标题&#10;第一页内容...&#10;&#10;第二页标题&#10;第二页内容..."></textarea></div>
+<p class="hint">用空行分隔不同幻灯片，每段第一行作为幻灯片标题</p>
+<button class="btn" id="generateBtn">🎨 生成 PPT</button>
+<div id="result"></div>
+</div>
+<script>
+document.getElementById('generateBtn').addEventListener('click',async()=>{
+  const btn=document.getElementById('generateBtn'),result=document.getElementById('result');
+  btn.disabled=true;btn.textContent='⏳ 正在生成...';
+  const fd=new FormData();fd.append('title',document.getElementById('title').value);fd.append('content',document.getElementById('content').value);
+  try{
+    const resp=await fetch('/ppt/generate',{method:'POST',body:fd});
+    if(!resp.ok){const e=await resp.json();throw new Error(e.error)}
+    const blob=await resp.blob(),url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='generated.pptx';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+    result.innerHTML='<div class="success">✅ 生成成功！PPT 已下载</div>';
+  }catch(e){result.innerHTML=`<div class="error">❌ ${e.message}</div>`}
+  finally{btn.disabled=false;btn.textContent='🎨 生成 PPT'}
+})
+</script>
+</body></html>

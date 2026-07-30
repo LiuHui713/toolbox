@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文字提炼工具</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;background:#0f0c29;min-height:100vh;color:#fff}
+.container{max-width:700px;margin:0 auto;padding:2rem 1.5rem}
+.back{color:#667eea;text-decoration:none;font-size:.9rem;margin-bottom:2rem;display:inline-block}
+h1{font-size:1.8rem;margin-bottom:.5rem}
+.sub{color:#aaa;font-size:.9rem;margin-bottom:2rem}
+.upload-area{border:2px dashed rgba(255,255,255,.2);border-radius:16px;padding:3rem 2rem;text-align:center;background:rgba(255,255,255,.04);margin-bottom:1.5rem;cursor:pointer;transition:.2s}
+.upload-area:hover{border-color:#667eea;background:rgba(102,126,234,.08)}
+.upload-area .icon{font-size:3rem;margin-bottom:1rem}
+.upload-area p{color:#aaa;font-size:.9rem}
+#fileInput{display:none}
+.file-list{margin-bottom:1rem}
+.file-item{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;background:rgba(255,255,255,.06);border-radius:8px;margin-bottom:.4rem;font-size:.9rem}
+.file-item .remove{color:#e74c3c;cursor:pointer;font-weight:700;margin-left:1rem}
+.hint{color:#888;font-size:.8rem;margin-bottom:1rem}
+.btn{display:block;width:100%;padding:1rem;font-size:1.1rem;font-weight:600;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;transition:.2s}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.result{margin-top:1rem;padding:1rem;border-radius:8px;text-align:center}
+.success{background:rgba(46,204,113,.15);color:#2ecc71}
+.error{background:rgba(231,76,60,.15);color:#e74c3c}
+</style>
+</head>
+<body>
+<div class="container">
+<a class="back" href="/">← 返回工具箱</a>
+<h1>📝 文字提炼工具</h1>
+<p class="sub">支持 PDF、PPT、Word、图片、音频、视频等多种格式，自动提取文字后导出 Word</p>
+
+<div class="upload-area" id="dropZone">
+  <div class="icon">📂</div>
+  <p>点击或拖拽文件到此处上传</p>
+  <p style="font-size:.75rem;margin-top:.5rem">支持 PDF / PPTX / DOCX / PNG / JPG / MP3 / WAV / MP4 等</p>
+</div>
+<input type="file" id="fileInput" multiple accept=".pdf,.pptx,.ppt,.docx,.doc,.png,.jpg,.jpeg,.mp3,.wav,.mp4,.avi,.mov,.webm,.m4a,.ogg,.txt,.md,.csv">
+
+<div class="file-list" id="fileList"></div>
+<div class="hint" id="fileCount">未选择文件</div>
+
+<button class="btn" id="extractBtn" disabled>🔍 提取文字</button>
+<div id="result"></div>
+</div>
+
+<script>
+const dropZone=document.getElementById('dropZone'),
+  fileInput=document.getElementById('fileInput'),
+  fileList=document.getElementById('fileList'),
+  fileCount=document.getElementById('fileCount'),
+  extractBtn=document.getElementById('extractBtn'),
+  result=document.getElementById('result');
+
+let files=[];
+
+dropZone.addEventListener('click',()=>fileInput.click());
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.style.borderColor='#667eea'});
+dropZone.addEventListener('dragleave',()=>dropZone.style.borderColor='rgba(255,255,255,.2)');
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.style.borderColor='rgba(255,255,255,.2)';addFiles(e.dataTransfer.files)});
+fileInput.addEventListener('change',()=>addFiles(fileInput.files));
+
+function addFiles(newFiles){for(let f of newFiles){if(!files.find(x=>x.name===f.name))files.push(f)}renderFiles()}
+function renderFiles(){
+  fileList.innerHTML=files.map((f,i)=>`<div class="file-item"><span>📄 ${f.name} (${(f.size/1024).toFixed(1)}KB)</span><span class="remove" onclick="files.splice(${i},1);renderFiles()">✕</span></div>`).join('');
+  fileCount.textContent=files.length?`已选择 ${files.length} 个文件`:'未选择文件';
+  extractBtn.disabled=!files.length}
+
+extractBtn.addEventListener('click',async()=>{
+  extractBtn.disabled=true;extractBtn.textContent='⏳ 正在提取...';
+  const fd=new FormData();files.forEach(f=>fd.append('files',f));
+  try{
+    const resp=await fetch('/text/extract',{method:'POST',body:fd});
+    if(!resp.ok){const e=await resp.json();throw new Error(e.error)}
+    const blob=await resp.blob(),url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='extracted.docx';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+    result.innerHTML='<div class="success">✅ 提取成功！Word 文档已下载</div>';
+  }catch(e){result.innerHTML=`<div class="error">❌ ${e.message}</div>`}
+  finally{extractBtn.disabled=false;extractBtn.textContent='🔍 提取文字'}
+})
+</script>
+</body>
+</html>

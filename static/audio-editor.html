@@ -1,0 +1,96 @@
+<!DOCTYPE html><html lang="zh-CN">
+<head><meta charset="UTF-8"><title>音频编辑器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#fff;font-family:sans-serif;padding:20px}
+h2{text-align:center;margin-bottom:15px;color:#667eea}
+.controls{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap}
+.controls button{padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;background:#667eea;color:#fff}
+.controls button:hover{opacity:.85}
+.controls input[type=range]{width:100px}
+.track{border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:12px;margin-bottom:10px;background:rgba(255,255,255,.04)}
+.track-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.track-name{font-size:14px;font-weight:600;min-width:80px}
+.track-header input[type=range]{flex:1}
+canvas{width:100%;height:60px;border:1px solid rgba(255,255,255,.1);border-radius:4px;background:#0a0a1a}
+.status{text-align:center;margin-top:10px;color:#888;font-size:13px}
+</style></head>
+<body>
+<h2>🎵 多轨道音频编辑器</h2>
+<div class="controls">
+  <button onclick="addTrack()">➕ 添加轨道</button>
+  <button onclick="loadAudio()">📂 导入音频</button>
+  <button onclick="playAll()">▶ 播放</button>
+  <button onclick="stopAll()">⏹ 停止</button>
+  <button onclick="exportMix()">💾 导出 WAV</button>
+  <label style="margin-left:10px;font-size:13px">主音量: <input type="range" id="masterVol" min="0" max="100" value="80" oninput="masterVolume=this.value/100"></label>
+</div>
+<div id="tracks"></div>
+<div class="status" id="status">就绪 — 点击"添加轨道"开始</div>
+<input type="file" id="audioInput" multiple accept="audio/*" style="display:none">
+
+<script>
+let tracks=[],audioCtx=null,masterVolume=0.8;
+
+function getCtx(){if(!audioCtx)audioCtx=new AudioContext();return audioCtx}
+
+class Track{
+  constructor(name='轨道'){
+    this.name=name;this.buffer=null;this.gain=1;this.source=null;this.startTime=0;this.offset=0
+  }
+  draw(canvas){
+    if(!this.buffer||!canvas)return;const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+    ctx.clearRect(0,0,w,h);ctx.fillStyle='#667eea';
+    const data=this.buffer.getChannelData(0),step=Math.max(1,Math.floor(data.length/w));
+    for(let i=0;i<w;i++){let sum=0;for(let j=0;j<step;j++){const idx=i*step+j;if(idx<data.length)sum+=Math.abs(data[idx])}const avg=sum/step;ctx.fillRect(i,h/2-avg*h/2,1,Math.max(1,avg*h))}
+  }
+}
+
+function addTrack(){const t=new Track(`轨道 ${tracks.length+1}`);tracks.push(t);renderTracks()}
+function renderTracks(){
+  const el=document.getElementById('tracks');
+  el.innerHTML=tracks.map((t,i)=>`<div class="track"><div class="track-header"><span class="track-name">${t.name}</span><span style="font-size:12px;color:#888">音量</span><input type="range" min="0" max="100" value="${t.gain*100}" oninput="tracks[${i}].gain=this.value/100"><button style="background:#e74c3c;font-size:12px;padding:4px 8px" onclick="tracks.splice(${i},1);renderTracks()">✕</button></div><canvas id="canvas${i}" width="800" height="60"></canvas></div>`).join('');
+  setTimeout(()=>{tracks.forEach((t,i)=>{const c=document.getElementById('canvas'+i);if(c)t.draw(c)})},100)}
+
+function loadAudio(){
+  document.getElementById('audioInput').click();
+  document.getElementById('audioInput').onchange=async(e=>{
+    const ctx=getCtx();
+    for(let f of e.target.files){
+      const buf=await f.arrayBuffer(),ab=await ctx.decodeAudioData(buf);
+      const t=new Track(f.name);t.buffer=ab;tracks.push(t)
+    }
+    renderTracks();document.getElementById('status').textContent=`已加载 ${tracks.length} 个轨道`
+  })
+}
+
+function playAll(){
+  const ctx=getCtx();stopAll();
+  tracks.forEach(t=>{if(!t.buffer)return;const s=ctx.createBufferSource();s.buffer=t.buffer;const g=ctx.createGain();g.gain.value=t.gain*masterVolume;s.connect(g);g.connect(ctx.destination);s.start(0,t.offset);t.source=s;t.startTime=ctx.currentTime})
+}
+
+function stopAll(){tracks.forEach(t=>{try{t.source?.stop()}catch(e){}})}
+async function exportMix(){
+  if(!tracks.some(t=>t.buffer)){alert('请先导入音频');return}
+  const ctx=new OfflineAudioContext(2,44100*Math.max(...tracks.map(t=>t.buffer?.duration||0)),44100);
+  tracks.forEach(t=>{if(!t.buffer)return;const s=ctx.createBufferSource();s.buffer=t.buffer;const g=ctx.createGain();g.gain.value=t.gain*masterVolume;s.connect(g);g.connect(ctx.destination);s.start(0)})
+  const buf=await ctx.startRendering();
+  const wav=audioBufferToWav(buf),blob=new Blob([wav],{type:'audio/wav'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mix.wav';
+  document.body.appendChild(a);a.click();document.body.removeChild(a)
+}
+
+function audioBufferToWav(buffer){
+  const n=buffer.numberOfChannels,sr=buffer.sampleRate,len=buffer.length*2*n+44,arr=new ArrayBuffer(len),view=new DataView(arr);
+  function w(s,o,b){for(let i=0;i<s.length;i++)view.setUint8(o+i,s.charCodeAt(i))}
+  w('RIFF',0,4);view.setUint32(4,len-8,true);w('WAVE',8,4);w('fmt ',12,4);view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,n,true);view.setUint32(24,sr,true);view.setUint32(28,sr*2*n,true);view.setUint16(32,2*n,true);view.setUint16(34,16,true);w('data',36,4);view.setUint32(40,len-44,true);
+  let off=44;const data=[];
+  for(let c=0;c<n;c++)data.push(buffer.getChannelData(c));
+  for(let i=0;i<buffer.length;i++){for(let c=0;c<n;c++){const s=Math.max(-1,Math.min(1,data[c][i]));view.setInt16(off,s<0?s*0x8000:s*0x7FFF,true);off+=2}}
+  return arr
+}
+
+document.getElementById('masterVol').addEventListener('input',function(){masterVolume=this.value/100})
+addTrack();addTrack();
+</script>
+</body></html>

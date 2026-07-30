@@ -1,0 +1,75 @@
+<!DOCTYPE html><html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>海报生成</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;background:#0f0c29;min-height:100vh;color:#fff}
+.container{max-width:700px;margin:0 auto;padding:2rem 1.5rem}
+.back{color:#667eea;text-decoration:none;font-size:.9rem;margin-bottom:2rem;display:inline-block}
+h1{font-size:1.8rem;margin-bottom:.5rem}
+.sub{color:#aaa;font-size:.9rem;margin-bottom:2rem}
+.form-group{margin-bottom:1.2rem}
+.form-group label{display:block;font-size:.9rem;color:#ccc;margin-bottom:.3rem}
+.form-group textarea,.form-group select,.form-group input[type=color]{width:100%;padding:.8rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:#fff;font-size:.95rem;font-family:inherit}
+.form-group textarea{height:120px;resize:vertical}
+.form-group input[type=color]{width:60px;height:40px;padding:2px;cursor:pointer}
+.color-row{display:flex;gap:1rem;align-items:center}
+.preview{margin-top:1rem;text-align:center}
+.preview img{max-width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.1)}
+.btn{display:block;width:100%;padding:1rem;font-size:1.1rem;font-weight:600;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(135deg,#43e97b,#38f9d7);color:#1a1a2e;transition:.2s;margin-top:1rem}
+.btn:disabled{opacity:.5}
+.result{margin-top:1rem;padding:1rem;border-radius:8px;text-align:center}
+.success{background:rgba(46,204,113,.15);color:#2ecc71}
+.error{background:rgba(231,76,60,.15);color:#e74c3c}
+.style-presets{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap}
+.style-presets button{padding:.5rem 1rem;border:1px solid rgba(255,255,255,.2);border-radius:20px;background:transparent;color:#ccc;cursor:pointer;font-size:.85rem;transition:.2s}
+.style-presets button:hover,.style-presets button.active{border-color:#38f9d7;color:#38f9d7}
+</style></head>
+<body>
+<div class="container">
+<a class="back" href="/">← 返回工具箱</a>
+<h1>🎨 海报生成工具</h1>
+<p class="sub">输入文字和风格，一键生成海报图片</p>
+<div class="style-presets">
+  <button class="active" data-style="modern" data-bg="#1a1a2e" data-fg="#ffffff">现代深色</button>
+  <button data-style="warm" data-bg="#2d1810" data-fg="#f5c842">暖色系</button>
+  <button data-style="cool" data-bg="#0d1b2a" data-fg="#48cae4">冷色系</button>
+  <button data-style="bold" data-bg="#e74c3c" data-fg="#ffffff">大胆红</button>
+  <button data-style="clean" data-bg="#ffffff" data-fg="#1a1a2e">极简白</button>
+</div>
+<div class="form-group"><label>海报文字 (首行为标题，其余为副标题)</label><textarea id="text" placeholder="海报标题&#10;副标题或描述文字&#10;更多内容..."></textarea></div>
+<div class="form-group color-row">
+  <div><label>背景色</label><input type="color" id="bgColor" value="#1a1a2e"></div>
+  <div><label>文字色</label><input type="color" id="textColor" value="#ffffff"></div>
+</div>
+<div class="preview"><img id="previewImg" src="" style="display:none"></div>
+<button class="btn" id="previewBtn">👁 生成预览</button>
+<button class="btn" id="downloadBtn" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;display:none">⬇ 下载海报 (PNG)</button>
+<div id="result"></div>
+</div>
+<script>
+document.querySelectorAll('.style-presets button').forEach(b=>{b.addEventListener('click',()=>{
+  document.querySelectorAll('.style-presets button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  document.getElementById('bgColor').value=b.dataset.bg;document.getElementById('textColor').value=b.dataset.fg
+})});
+
+let posterBlob=null;
+document.getElementById('previewBtn').addEventListener('click',async()=>{
+  const btn=document.getElementById('previewBtn'),result=document.getElementById('result');
+  btn.disabled=true;btn.textContent='⏳ 生成中...';
+  const fd=new FormData();fd.append('text',document.getElementById('text').value);fd.append('bg_color',document.getElementById('bgColor').value);fd.append('text_color',document.getElementById('textColor').value);
+  try{
+    const resp=await fetch('/poster/generate',{method:'POST',body:fd});
+    if(!resp.ok){const e=await resp.json();throw new Error(e.error)}
+    posterBlob=await resp.blob();
+    document.getElementById('previewImg').src=URL.createObjectURL(posterBlob);
+    document.getElementById('previewImg').style.display='block';
+    document.getElementById('downloadBtn').style.display='block';
+    result.innerHTML='<div class="success">✅ 预览已生成</div>';
+  }catch(e){result.innerHTML=`<div class="error">❌ ${e.message}</div>`}
+  finally{btn.disabled=false;btn.textContent='👁 生成预览'}
+});
+document.getElementById('downloadBtn').addEventListener('click',()=>{
+  if(!posterBlob)return;const a=document.createElement('a');a.href=URL.createObjectURL(posterBlob);a.download='poster.png';document.body.appendChild(a);a.click();document.body.removeChild(a)
+})
+</script>
+</body></html>

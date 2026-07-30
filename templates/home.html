@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工具箱</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:100vh;color:#fff}
+.container{max-width:900px;margin:0 auto;padding:3rem 1.5rem}
+header{text-align:center;margin-bottom:3rem}
+header h1{font-size:2.4rem;font-weight:700;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.5rem}
+header p{color:#aaa;font-size:1rem}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:2rem;text-decoration:none;color:#fff;transition:all .25s;backdrop-filter:blur(10px)}
+.card:hover{background:rgba(255,255,255,.12);transform:translateY(-4px);box-shadow:0 12px 40px rgba(102,126,234,.2)}
+.card .icon{font-size:2.5rem;margin-bottom:1rem}
+.card h3{font-size:1.2rem;margin-bottom:.5rem}
+.card p{color:#aaa;font-size:.9rem;line-height:1.5}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+  <h1>🧰 工具箱</h1>
+  <p>更多好玩儿的工具，等你来一起创造</p>
+</header>
+<div class="grid">
+  <a class="card" href="/text">
+    <div class="icon">📝</div>
+    <h3>文字提炼工具</h3>
+    <p>上传音频、视频、PDF、PPT、图片，自动提取文字，排版后导出 Word 文档</p>
+  </a>
+  <a class="card" href="/ppt">
+    <div class="icon">📊</div>
+    <h3>PPT 生成工具</h3>
+    <p>输入文字内容，自动生成排版精美的 PowerPoint 演示文稿</p>
+  </a>
+  <a class="card" href="/audio">
+    <div class="icon">🎵</div>
+    <h3>音频合成工具</h3>
+    <p>多轨道音频编辑器，支持拖拽剪辑、混音、添加音效，导出 WAV</p>
+  </a>
+  <a class="card" href="/poster">
+    <div class="icon">🎨</div>
+    <h3>海报生成工具</h3>
+    <p>输入文字和风格，一键生成海报图片，支持自定义颜色</p>
+  </a>
+</div>
+</div>
+</body>
+</html>
