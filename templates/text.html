@@ -75,10 +75,17 @@ extractBtn.addEventListener('click',async()=>{
   try{
     const resp=await fetch('/text/extract',{method:'POST',body:fd});
     if(!resp.ok){const e=await resp.json();throw new Error(e.error)}
-    const blob=await resp.blob(),url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download='extracted.docx';
-    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-    result.innerHTML='<div class="success">✅ 提取成功！Word 文档已下载</div>';
+    // Direct download via Content-Disposition header
+    const cd=resp.headers.get('Content-Disposition');
+    const match=cd&&cd.match(/filename="?(.+?)"?$/);
+    const fname=match?match[1]:'extracted.docx';
+    const blob=await resp.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=fname;a.style.display='none';
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url)},100);
+    result.innerHTML='<div class="success">✅ 提取成功！文件已下载</div>';
   }catch(e){result.innerHTML=`<div class="error">❌ ${e.message}</div>`}
   finally{extractBtn.disabled=false;extractBtn.textContent='🔍 提取文字'}
 })
