@@ -2,21 +2,13 @@
 Toolbox - 工具箱网站
 """
 
-# Preload Whisper model at startup (lazy, cached in memory)
-_whisper_model = None
-
-def get_whisper_model():
-    global _whisper_model
-    if _whisper_model is None:
-        from faster_whisper import WhisperModel
-        _whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
-    return _whisper_model
-import io, os, uuid
-from flask import Flask, render_template, request, send_file, jsonify
+import io, os, uuid, threading
+from datetime import datetime
+from flask import Flask, render_template, request, send_file, make_response, jsonify
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -25,20 +17,30 @@ ALLOWED_EXTENSIONS = {'pdf','pptx','ppt','docx','doc','png','jpg','jpeg','mp3','
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# Preload Whisper model at startup (lazy, cached)
+_whisper_model = None
+def get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        from faster_whisper import WhisperModel
+        _whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
+    return _whisper_model
+
+# Start model download in background
+threading.Thread(target=get_whisper_model, daemon=True).start()
+
 
 @app.route('/')
 def home():
     return render_template('home.html')
 
 
-# ==================== 文字提炼 ====================
 @app.route('/text')
 def text_tool():
     return render_template('text.html')
 
 @app.route('/text/extract', methods=['POST'])
 def text_extract():
-    """多模态文字提取 → Word 输出"""
     try:
         texts = []
         original_names = []
@@ -67,8 +69,8 @@ def text_extract():
                             if shape.has_text_frame:
                                 texts.append(shape.text_frame.text)
                 elif ext in ('docx', 'doc'):
-                    import docx
-                    doc = docx.Document(fname)
+                    import docx as _docx
+                    doc = _docx.Document(fname)
                     texts.extend([p.text for p in doc.paragraphs])
                 elif ext in ('png', 'jpg', 'jpeg'):
                     from rapidocr_onnxruntime import RapidOCR
@@ -77,7 +79,6 @@ def text_extract():
                     if result:
                         texts.extend([line[1] for line in result])
                 elif ext in ('mp3', 'wav', 'm4a', 'ogg'):
-                    # Groq Whisper API (free tier) - high accuracy, no server load
                     import requests as req
                     groq_key = os.environ.get('GROQ_API_KEY', '')
                     if groq_key:
@@ -93,12 +94,11 @@ def text_extract():
                         else:
                             raise Exception(f"Groq API error: {resp.text}")
                     else:
-                        # Fallback: local faster-whisper
                         model = get_whisper_model()
                         segments, _ = model.transcribe(fname, language="zh")
                         texts.extend([s.text for s in segments])
                 elif ext in ('mp4', 'avi', 'mov', 'webm'):
-                    import requests as req, subprocess, tempfile
+                    import subprocess, requests as req
                     audio_path = fname + '.wav'
                     subprocess.run(['ffmpeg', '-i', fname, '-vn', '-acodec', 'pcm_s16le', '-y', audio_path],
                                    capture_output=True, timeout=120)
@@ -131,9 +131,7 @@ def text_extract():
         if not texts:
             return jsonify({"error": "未能提取到文字"}), 400
 
-        # Generate Word document
         from docx import Document as DocxDoc
-        from datetime import datetime
         doc = DocxDoc()
         doc.add_heading('文字提取结果', 0)
         for i, t in enumerate(texts):
@@ -144,15 +142,14 @@ def text_extract():
         doc.save(buf)
         buf.seek(0)
         
-        # Filename + timestamp
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         base = original_names[0].rsplit('.', 1)[0] if original_names else 'extracted'
         dl_name = f'{base}_{ts}.docx'
         
-        from flask import make_response
+        from urllib.parse import quote
         resp = make_response(buf.read())
         resp.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        resp.headers['Content-Disposition'] = f'attachment; filename="{dl_name}"'
+        resp.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(dl_name)}"
         resp.headers['Content-Length'] = str(len(resp.data))
         resp.headers['X-Content-Type-Options'] = 'nosniff'
         resp.headers['Cache-Control'] = 'no-cache'
@@ -162,7 +159,6 @@ def text_extract():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== PPT生成 ====================
 @app.route('/ppt')
 def ppt_tool():
     return render_template('ppt.html')
@@ -181,13 +177,11 @@ def ppt_generate():
         prs.slide_width = Inches(13.333)
         prs.slide_height = Inches(7.5)
 
-        # Title slide
         slide = prs.slides.add_slide(prs.slide_layouts[0])
         slide.shapes.title.text = title
         if slide.placeholders[1].has_text_frame:
             slide.placeholders[1].text = "AI 自动生成"
 
-        # Content slides
         paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
         for para in paragraphs:
             lines = para.split('\n')
@@ -208,13 +202,11 @@ def ppt_generate():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== 音频合成 ====================
 @app.route('/audio')
 def audio_tool():
     return render_template('audio.html')
 
 
-# ==================== 海报生成 ====================
 @app.route('/poster')
 def poster_tool():
     return render_template('poster.html')
@@ -223,7 +215,6 @@ def poster_tool():
 def poster_generate():
     try:
         text = request.form.get('text', '')
-        style = request.form.get('style', 'modern')
         bg_color = request.form.get('bg_color', '#1a1a2e')
         text_color = request.form.get('text_color', '#ffffff')
 
@@ -238,7 +229,6 @@ def poster_generate():
             font_large = ImageFont.load_default()
             font_small = ImageFont.load_default()
 
-        # Draw text centered
         lines = text.split('\n')
         y = 200
         for i, line in enumerate(lines):
@@ -258,7 +248,4 @@ def poster_generate():
 
 
 if __name__ == '__main__':
-    # Pre-download whisper model on startup
-    import threading
-    threading.Thread(target=get_whisper_model, daemon=True).start()
     app.run(host='0.0.0.0', port=5000, debug=True)
